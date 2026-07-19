@@ -1,0 +1,104 @@
+/* Panel styling - dark only, on top of Bootstrap 5.3 (data-bs-theme="dark").
+   Surfaces follow the validated chart palette: page #0d0d0d, cards #1a1a19. */
+
+:root[data-bs-theme=dark] {
+    --bs-body-bg: #0d0d0d;
+    --bs-body-color: #c3c2b7;
+    --bs-border-color: rgba(255, 255, 255, .1);
+}
+
+.card {
+    --bs-card-bg: #1a1a19;
+    --bs-card-border-color: rgba(255, 255, 255, .1);
+    --bs-card-cap-bg: transparent;
+}
+
+.card-header {
+    color: #fff;
+    font-weight: 600;
+    font-size: .9rem;
+}
+
+/* Sidebar */
+.sidebar-col {
+    background: #131312;
+    border-right: 1px solid rgba(255, 255, 255, .08);
+}
+
+@media (min-width: 992px) {
+    .sidebar-col {
+        min-height: 100vh;
+    }
+    .sidebar {
+        position: sticky;
+        top: 0;
+    }
+}
+
+.sidebar {
+    --bs-offcanvas-bg: #131312;
+}
+
+.sidebar .brand {
+    color: #fff;
+    font-weight: 600;
+}
+
+.nav-pills .nav-link {
+    color: #c3c2b7;
+    padding: .375rem .75rem;
+}
+
+.nav-pills .nav-link:hover {
+    color: #fff;
+}
+
+.nav-pills .nav-link.active {
+    background: #256abf;
+    color: #fff;
+}
+
+/* Stat tiles */
+.stat-card .stat-value {
+    color: #fff;
+    font-size: 1.6rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.stat-card .stat-label {
+    color: #898781;
+    font-size: .85rem;
+}
+
+/* Tables */
+.table {
+    --bs-table-bg: transparent;
+    font-size: .875rem;
+}
+
+.table thead th {
+    color: #898781;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.mw-path {
+    max-width: 340px;
+    vertical-align: bottom;
+}
+
+.ua {
+    max-width: 260px;
+    vertical-align: bottom;
+}
+
+.badge {
+    font-weight: 500;
+}
+
+/* Charts */
+.chart-box {
+    position: relative;
+    height: 280px;
+}

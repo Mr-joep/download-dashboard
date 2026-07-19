@@ -1,0 +1,12 @@
+# Apache fallback for local testing (XAMPP). Production uses nginx-example.conf.
+# When testing in a subdirectory, set 'base_path' in config.php accordingly
+# (e.g. '/down/public') and use serve_method 'php'.
+
+<Files "complete.php">
+    Require all denied
+</Files>
+
+RewriteEngine On
+RewriteCond %{REQUEST_URI} !/panel/
+RewriteCond %{REQUEST_URI} !/serve\.php$
+RewriteRule ^ serve.php [L]
