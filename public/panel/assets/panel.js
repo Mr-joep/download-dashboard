@@ -116,30 +116,145 @@
         refresh();
     }
 
-    // ---- upload: overwrite confirmation ------------------------------------
+    // ---- upload: multi-file AJAX upload with a progress bar per file --------
     if (page === 'upload') {
         var form = document.getElementById('upload-form');
         if (form) {
-            var confirmed = false;
-            form.addEventListener('submit', function (e) {
-                var fileInput = document.getElementById('file');
-                var overwrite = document.getElementById('overwrite');
-                if (confirmed || overwrite.checked || !fileInput.files.length) return;
+            var fileInput = document.getElementById('file');
+            var overwrite = document.getElementById('overwrite');
+            var submitBtn = document.getElementById('upload-submit');
+            var list = document.getElementById('upload-progress-list');
+            var csrf = form.querySelector('[name="csrf"]').value;
 
-                e.preventDefault();
-                var name = fileInput.files[0].name;
-                fetch('api.php?action=file_exists&name=' + encodeURIComponent(name))
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        if (data.exists &&
-                            !window.confirm('"' + data.name + '" already exists. Overwrite it?')) {
-                            return;
+            var setRowState = function (row, cls, text) {
+                row.querySelector('.upload-status').textContent = text;
+                row.querySelector('.progress-bar').classList.remove(
+                    'bg-primary', 'bg-success', 'bg-danger'
+                );
+                row.querySelector('.progress-bar').classList.add(cls);
+            };
+
+            var buildRow = function (file) {
+                var row = document.createElement('div');
+                row.className = 'upload-row mb-2';
+
+                var head = document.createElement('div');
+                head.className = 'd-flex justify-content-between small mb-1';
+
+                var nameEl = document.createElement('span');
+                nameEl.className = 'text-truncate mw-path';
+                nameEl.textContent = file.name;
+
+                var statusEl = document.createElement('span');
+                statusEl.className = 'upload-status text-secondary text-nowrap ms-2';
+                statusEl.textContent = 'Waiting…';
+
+                head.appendChild(nameEl);
+                head.appendChild(statusEl);
+
+                var bar = document.createElement('div');
+                bar.className = 'progress';
+                bar.style.height = '6px';
+                var barInner = document.createElement('div');
+                barInner.className = 'progress-bar bg-primary';
+                barInner.setAttribute('role', 'progressbar');
+                barInner.style.width = '0%';
+                bar.appendChild(barInner);
+
+                row.appendChild(head);
+                row.appendChild(bar);
+                list.appendChild(row);
+                return row;
+            };
+
+            var uploadFile = function (file, allowOverwrite) {
+                var row = buildRow(file);
+                return new Promise(function (resolve) {
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('POST', 'upload.php', true);
+                    xhr.upload.addEventListener('progress', function (e) {
+                        if (!e.lengthComputable) return;
+                        var pct = Math.round((e.loaded / e.total) * 100);
+                        row.querySelector('.progress-bar').style.width = pct + '%';
+                        setRowState(row, 'bg-primary', pct + '%');
+                    });
+                    xhr.onload = function () {
+                        var data = null;
+                        try { data = JSON.parse(xhr.responseText); } catch (err) { /* ignore */ }
+                        if (data && data.success) {
+                            row.querySelector('.progress-bar').style.width = '100%';
+                            setRowState(row, 'bg-success', 'Done (' + data.size + ')');
+                        } else {
+                            setRowState(row, 'bg-danger', (data && data.error) || 'Upload failed');
                         }
-                        if (data.exists) overwrite.checked = true;
-                        confirmed = true;
-                        form.submit();
-                    })
-                    .catch(function () { confirmed = true; form.submit(); });
+                        resolve();
+                    };
+                    xhr.onerror = function () {
+                        setRowState(row, 'bg-danger', 'Network error');
+                        resolve();
+                    };
+
+                    var fd = new FormData();
+                    fd.append('csrf', csrf);
+                    fd.append('ajax', '1');
+                    fd.append('overwrite', allowOverwrite ? '1' : '0');
+                    fd.append('file', file);
+                    xhr.send(fd);
+                });
+            };
+
+            var skipRow = function (file) {
+                var row = buildRow(file);
+                setRowState(row, 'bg-secondary', 'Skipped (already exists)');
+                row.querySelector('.progress-bar').style.width = '100%';
+            };
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var files = Array.prototype.slice.call(fileInput.files);
+                if (!files.length) return;
+
+                list.textContent = '';
+                list.classList.remove('d-none');
+                fileInput.disabled = true;
+                submitBtn.disabled = true;
+
+                var checkExisting = overwrite.checked
+                    ? Promise.resolve(files.map(function () { return false; }))
+                    : Promise.all(files.map(function (file) {
+                        return fetch('api.php?action=file_exists&name=' + encodeURIComponent(file.name))
+                            .then(function (r) { return r.json(); })
+                            .then(function (data) { return !!data.exists; })
+                            .catch(function () { return false; });
+                    }));
+
+                checkExisting.then(function (existsFlags) {
+                    var existingNames = files.filter(function (f, i) { return existsFlags[i]; })
+                        .map(function (f) { return f.name; });
+
+                    var overwriteExisting = overwrite.checked;
+                    if (existingNames.length && !overwrite.checked) {
+                        overwriteExisting = window.confirm(
+                            'These files already exist:\n' + existingNames.join('\n') +
+                            '\n\nOverwrite them? (Cancel skips them, other files still upload)'
+                        );
+                    }
+
+                    var uploads = files.map(function (file, i) {
+                        if (existsFlags[i] && !overwriteExisting) {
+                            skipRow(file);
+                            return Promise.resolve();
+                        }
+                        return uploadFile(file, existsFlags[i] ? overwriteExisting : overwrite.checked);
+                    });
+
+                    Promise.all(uploads).then(function () {
+                        fileInput.disabled = false;
+                        submitBtn.disabled = false;
+                        fileInput.value = '';
+                        setTimeout(function () { window.location.reload(); }, 900);
+                    });
+                });
             });
         }
     }

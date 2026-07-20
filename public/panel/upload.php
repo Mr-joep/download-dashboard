@@ -11,6 +11,7 @@ $baseUrl = rtrim((string) $config['public_base_url'], '/');
 $message = null;
 $error   = null;
 $newLink = null;
+$isAjax  = ($_POST['ajax'] ?? '') === '1';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     Auth::validateCsrf($_POST['csrf'] ?? null);
@@ -42,6 +43,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $message = 'Uploaded "' . $name . '" (' . format_bytes($size) . ').';
             }
         }
+    }
+
+    if ($isAjax) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'success' => $error === null,
+            'error'   => $error,
+            'name'    => $name ?? null,
+            'size'    => isset($size) ? format_bytes($size) : null,
+            'link'    => $newLink,
+        ]);
+        exit;
     }
 }
 
@@ -76,16 +89,17 @@ panel_header('Upload', 'upload');
         <form id="upload-form" method="post" enctype="multipart/form-data">
           <input type="hidden" name="csrf" value="<?= h(Auth::csrfToken()) ?>">
           <div class="mb-3">
-            <label class="form-label" for="file">File</label>
-            <input class="form-control" type="file" id="file" name="file" required>
-            <div class="form-text">Server upload limit: <?= h($uploadMax) ?>. Copy very large files to the server directly (scp/rsync); they are picked up automatically.</div>
+            <label class="form-label" for="file">File(s)</label>
+            <input class="form-control" type="file" id="file" name="file" multiple required>
+            <div class="form-text">Server upload limit: <?= h($uploadMax) ?> per file. Copy very large files to the server directly (scp/rsync); they are picked up automatically.</div>
           </div>
           <div class="form-check mb-3">
             <input class="form-check-input" type="checkbox" id="overwrite" name="overwrite" value="1">
             <label class="form-check-label" for="overwrite">Overwrite if the file already exists</label>
           </div>
-          <button class="btn btn-primary" type="submit">Upload</button>
+          <button class="btn btn-primary" type="submit" id="upload-submit">Upload</button>
         </form>
+        <div id="upload-progress-list" class="mt-3 d-none"></div>
       </div>
     </div>
   </div>
