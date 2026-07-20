@@ -1,9 +1,4 @@
 <?php
-
-/**
- * Production configuration for dow.mr-joep.nl. See config.example.php for
- * the documentation of every option.
- */
 return [
     'db_dsn'  => 'mysql:host=localhost;dbname=dow;charset=utf8mb4',
     'db_user' => 'dow', //user from the DB
