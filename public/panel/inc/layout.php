@@ -16,6 +16,7 @@ function panel_nav(): array
         'search'     => ['search.php', 'Search'],
         'statistics' => ['statistics.php', 'Statistics'],
         'upload'     => ['upload.php', 'Upload'],
+        'storage'    => ['storage.php', 'Storage'],
     ];
 }
 

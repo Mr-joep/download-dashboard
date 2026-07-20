@@ -18,6 +18,56 @@
         });
     });
 
+    // ---- storage: rename modal + delete confirmation -------------------------
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-rename-name]');
+        if (!btn) return;
+        var name = btn.dataset.renameName;
+        document.getElementById('rename-name').value = name;
+        var input = document.getElementById('rename-new-name');
+        input.value = name;
+        var modalEl = document.getElementById('rename-modal');
+        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+        modalEl.addEventListener('shown.bs.modal', function () {
+            input.focus();
+            input.select();
+        }, { once: true });
+    });
+
+    document.addEventListener('submit', function (e) {
+        var form = e.target.closest('[data-confirm]');
+        if (form && !window.confirm(form.dataset.confirm)) {
+            e.preventDefault();
+        }
+    });
+
+    // ---- sortable table columns ---------------------------------------------
+    // <table data-sortable> + <th data-sort> (value taken from that column's
+    // td[data-value], falling back to its text). Click toggles desc/asc,
+    // starting with desc (high to low).
+    document.querySelectorAll('table[data-sortable]').forEach(function (table) {
+        var headers = table.querySelectorAll('th[data-sort]');
+        headers.forEach(function (th) {
+            th.addEventListener('click', function () {
+                var dir = th.dataset.dir === 'desc' ? 'asc' : 'desc';
+                headers.forEach(function (h) { delete h.dataset.dir; });
+                th.dataset.dir = dir;
+
+                var idx = Array.prototype.indexOf.call(th.parentNode.children, th);
+                var tbody = table.tBodies[0];
+                var rows = Array.prototype.slice.call(tbody.rows);
+                rows.sort(function (a, b) {
+                    var cellA = a.cells[idx], cellB = b.cells[idx];
+                    var av = parseFloat((cellA.dataset.value ?? cellA.textContent).replace(/,/g, '')) || 0;
+                    var bv = parseFloat((cellB.dataset.value ?? cellB.textContent).replace(/,/g, '')) || 0;
+                    return dir === 'desc' ? bv - av : av - bv;
+                });
+                rows.forEach(function (r) { tbody.appendChild(r); });
+            });
+        });
+    });
+
     // ---- live visitors: refresh every 5 seconds ---------------------------
     if (page === 'live') {
         var tbody = document.getElementById('live-rows');

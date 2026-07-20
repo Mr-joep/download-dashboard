@@ -83,6 +83,33 @@
     white-space: nowrap;
 }
 
+.table thead th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.table thead th.sortable:hover {
+    color: #fff;
+}
+
+.table thead th.sortable::after {
+    content: '\2195';
+    display: inline-block;
+    width: 1em;
+    margin-left: .2em;
+    opacity: .4;
+}
+
+.table thead th.sortable[data-dir="desc"]::after {
+    content: '\2193';
+    opacity: 1;
+}
+
+.table thead th.sortable[data-dir="asc"]::after {
+    content: '\2191';
+    opacity: 1;
+}
+
 .mw-path {
     max-width: 340px;
     vertical-align: bottom;
