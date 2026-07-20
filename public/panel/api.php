@@ -8,11 +8,6 @@ $config = require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 Auth::start();
 header('Content-Type: application/json; charset=utf-8');
-if (!Auth::check()) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Not logged in']);
-    exit;
-}
 
 switch ($_GET['action'] ?? '') {
     case 'live':

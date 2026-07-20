@@ -14,42 +14,58 @@ $error   = null;
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     Auth::validateCsrf($_POST['csrf'] ?? null);
     $action = (string) ($_POST['action'] ?? '');
-    // resolve() (not sanitize_filename(), which strips directories via
-    // basename()) so files_dir subdirectories keep working here too.
-    $file = $repo->resolve((string) ($_POST['name'] ?? ''));
+    $name   = (string) ($_POST['name'] ?? '');
 
-    if ($file === null) {
-        $error = 'File not found.';
-    } elseif ($action === 'delete') {
-        unlink($file['path']);
-        $repo->syncFromDisk();
-        $message = 'Deleted "' . $file['filename'] . '".';
-    } elseif ($action === 'rename') {
-        $newName   = sanitize_filename((string) ($_POST['new_name'] ?? ''));
-        $newTarget = $repo->filesDir() . DIRECTORY_SEPARATOR . $newName;
-        if ($newName === '') {
-            $error = 'Invalid new file name.';
-        } elseif (preg_match('/\.(php\d?|phtml|phar)(\.|$)/i', $newName) === 1) {
-            $error = 'PHP files cannot be served, so they cannot be uploaded or renamed to.';
-        } elseif ($newName === $file['filename']) {
-            $error = 'That is already the current name.';
-        } elseif (is_file($newTarget)) {
-            $error = 'A file named "' . $newName . '" already exists.';
-        } elseif (Database::fetch('SELECT id FROM files WHERE filename = ?', [$newName]) !== null) {
-            $error = 'That name was used before and its history is still on record. Pick a different name.';
-        } elseif (!rename($file['path'], $newTarget)) {
-            $error = 'Could not rename the file. Check that the files directory is writable for PHP.';
+    if ($action === 'purge') {
+        // Permanently forget a removed file's stats (downloads, first/last
+        // seen). Only for files already gone from disk - an active file
+        // must go through 'delete' first, which is what makes it "missing".
+        $row = Database::fetch('SELECT id FROM files WHERE filename = ? AND missing = 1', [$name]);
+        if ($row === null) {
+            $error = 'No removed-file record found for that name.';
         } else {
-            // Keep the stats (downloads, first/last seen) attached under the new name.
-            Database::run('UPDATE files SET filename = ? WHERE filename = ?', [$newName, $file['filename']]);
-            $message = 'Renamed "' . $file['filename'] . '" to "' . $newName . '".';
+            Database::run('DELETE FROM files WHERE id = ?', [$row['id']]);
+            $message = 'Removed the history for "' . $name . '".';
         }
     } else {
-        $error = 'Unknown action.';
+        // resolve() (not sanitize_filename(), which strips directories via
+        // basename()) so files_dir subdirectories keep working here too.
+        $file = $repo->resolve($name);
+
+        if ($file === null) {
+            $error = 'File not found.';
+        } elseif ($action === 'delete') {
+            unlink($file['path']);
+            $repo->syncFromDisk();
+            $message = 'Deleted "' . $file['filename'] . '".';
+        } elseif ($action === 'rename') {
+            $newName   = sanitize_filename((string) ($_POST['new_name'] ?? ''));
+            $newTarget = $repo->filesDir() . DIRECTORY_SEPARATOR . $newName;
+            if ($newName === '') {
+                $error = 'Invalid new file name.';
+            } elseif (preg_match('/\.(php\d?|phtml|phar)(\.|$)/i', $newName) === 1) {
+                $error = 'PHP files cannot be served, so they cannot be uploaded or renamed to.';
+            } elseif ($newName === $file['filename']) {
+                $error = 'That is already the current name.';
+            } elseif (is_file($newTarget)) {
+                $error = 'A file named "' . $newName . '" already exists.';
+            } elseif (Database::fetch('SELECT id FROM files WHERE filename = ?', [$newName]) !== null) {
+                $error = 'That name was used before and its history is still on record. Pick a different name.';
+            } elseif (!rename($file['path'], $newTarget)) {
+                $error = 'Could not rename the file. Check that the files directory is writable for PHP.';
+            } else {
+                // Keep the stats (downloads, first/last seen) attached under the new name.
+                Database::run('UPDATE files SET filename = ? WHERE filename = ?', [$newName, $file['filename']]);
+                $message = 'Renamed "' . $file['filename'] . '" to "' . $newName . '".';
+            }
+        } else {
+            $error = 'Unknown action.';
+        }
     }
 }
 
-$files = Database::fetchAll('SELECT * FROM files WHERE missing = 0 ORDER BY filename ASC');
+$files   = Database::fetchAll('SELECT * FROM files WHERE missing = 0 ORDER BY filename ASC');
+$removed = Database::fetchAll('SELECT * FROM files WHERE missing = 1 ORDER BY filename ASC');
 
 panel_header('Storage', 'storage');
 ?>
@@ -97,6 +113,43 @@ panel_header('Storage', 'storage');
       <?php endforeach; ?>
       <?php if ($files === []): ?>
         <tr><td colspan="5" class="text-center text-secondary py-4">No files yet.</td></tr>
+      <?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header">Removed files (<?= count($removed) ?>) <span class="text-secondary fw-normal">- history kept after Delete, until purged here</span></div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Size</th>
+          <th class="text-end">Downloads</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      <?php foreach ($removed as $f): ?>
+        <tr>
+          <td><span class="d-inline-block text-truncate mw-path"><?= h($f['filename']) ?></span></td>
+          <td class="text-nowrap"><?= h(format_bytes((int) $f['size'])) ?></td>
+          <td class="text-end"><?= number_format((int) $f['total_downloads']) ?></td>
+          <td class="text-end text-nowrap">
+            <form class="d-inline" method="post"
+                  data-confirm="Permanently remove the history for &quot;<?= h($f['filename']) ?>&quot;? This cannot be undone.">
+              <input type="hidden" name="csrf" value="<?= h(Auth::csrfToken()) ?>">
+              <input type="hidden" name="action" value="purge">
+              <input type="hidden" name="name" value="<?= h($f['filename']) ?>">
+              <button class="btn btn-sm btn-outline-danger" type="submit">Purge history</button>
+            </form>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      <?php if ($removed === []): ?>
+        <tr><td colspan="4" class="text-center text-secondary py-4">Nothing removed.</td></tr>
       <?php endif; ?>
       </tbody>
     </table>

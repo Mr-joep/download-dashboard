@@ -21,9 +21,11 @@ by nginx via `X-Accel-Redirect`, so even a 260 GB file never touches PHP memory.
   went out (`post_action` → `complete.php`); resumes/range segments are logged but
   not double-counted.
 - Bootstrap dark dashboard: overview, live visitors (auto-refresh), recent
-  downloads, top downloads, top IPs, bots, 404s, search, Chart.js statistics and
-  an upload manager with overwrite confirmation and download-link generator.
-  **No login** — anyone who can reach `/panel/` can use it.
+  downloads, top downloads (click "Downloads"/"Requests" to sort), top IPs,
+  bots, 404s, search, Chart.js statistics, an upload manager with overwrite
+  confirmation and download-link generator, and a Storage tab (rename,
+  delete, permanently purge a deleted file's history). **No login** — anyone
+  who can reach `/panel/` can use it.
 
 ## Layout as deployed on this server
 
@@ -62,6 +64,22 @@ root points at `public_html/public`, `/_protected/` (the X-Accel-Redirect
 target) is aliased to `public_html/files/`, and the existing SSL cert paths /
 webmail / admin subdomain redirects Virtualmin manages were preserved. A
 backup of the pre-deploy config is at `/root/dow.mr-joep.nl.conf.bak`.
+
+`/phpmyadmin/` has its own `root /home/dow/public_html;` location block,
+since the phpMyAdmin install lives at `public_html/phpmyadmin/`, outside the
+app's `public/` docroot. If Virtualmin's "PHP script execution mode" toggle
+is changed again in the UI, it may re-append its own generic `location ~
+"\.php(/|$)"` block at the bottom of this file — that block has always been
+broken (no `SCRIPT_FILENAME`, no `fastcgi_split_path_info`) and is redundant
+with the explicit per-path blocks already here; delete it if it reappears.
+
+Traffic normally arrives via Cloudflare (Zero Trust in front of `/panel/*`);
+`/etc/nginx/conf.d/cloudflare-realip.conf` maps Cloudflare's `CF-Connecting-IP`
+header back onto `$remote_addr` for connections that actually originate from
+Cloudflare's published ranges, so IPs logged by the app (Top IPs, bot-rate
+detection, etc.) are the real visitor IP, not Cloudflare's edge IP. The
+origin's real IP is still directly reachable though (bypassing both
+Cloudflare and Access) — see `/home/dow/questions.md`.
 
 Reload after editing:
 

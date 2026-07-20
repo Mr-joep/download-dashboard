@@ -3,8 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Minimal session login for the panel. The password lives in config.php,
- * either as plain text or as a password_hash() value.
+ * Session + CSRF for the panel. There is no login (see public/panel/inc/panel.php).
  */
 final class Auth
 {
@@ -20,37 +19,6 @@ final class Auth
             'secure'   => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
         ]);
         session_start();
-    }
-
-    public static function check(): bool
-    {
-        return !empty($_SESSION['panel_authed']);
-    }
-
-    public static function login(string $password, array $config): bool
-    {
-        $stored = (string) ($config['panel_password'] ?? '');
-        if ($stored === '' || $password === '') {
-            return false;
-        }
-        $ok = str_starts_with($stored, '$2y$') || str_starts_with($stored, '$argon2')
-            ? password_verify($password, $stored)
-            : hash_equals($stored, $password);
-        if ($ok) {
-            session_regenerate_id(true);
-            $_SESSION['panel_authed'] = true;
-        }
-        return $ok;
-    }
-
-    public static function logout(): void
-    {
-        $_SESSION = [];
-        if (ini_get('session.use_cookies')) {
-            $p = session_get_cookie_params();
-            setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
-        }
-        session_destroy();
     }
 
     public static function csrfToken(): string
