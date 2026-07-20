@@ -26,7 +26,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Log in · down.mr-joep.nl</title>
+<title>Log in · dow.mr-joep.nl</title>
 <link rel="stylesheet" href="assets/bootstrap.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
@@ -34,7 +34,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 <main class="mx-auto w-100 p-3" style="max-width:22rem">
   <div class="card">
     <div class="card-body p-4">
-      <h1 class="h5 mb-1">down.mr-joep.nl</h1>
+      <h1 class="h5 mb-1">dow.mr-joep.nl</h1>
       <p class="text-secondary small mb-3">Download statistics panel</p>
       <?php if ($error !== null): ?>
       <div class="alert alert-danger py-2"><?= h($error) ?></div>

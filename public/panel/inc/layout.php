@@ -27,7 +27,7 @@ function panel_header(string $title, string $active): void
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?= h($title) ?> · down.mr-joep.nl</title>
+<title><?= h($title) ?> · dow.mr-joep.nl</title>
 <link rel="stylesheet" href="assets/bootstrap.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
@@ -37,11 +37,11 @@ function panel_header(string $title, string $active): void
     <aside class="col-lg-2 p-0 sidebar-col">
       <div class="offcanvas-lg offcanvas-start sidebar" tabindex="-1" id="sidebar" aria-label="Menu">
         <div class="offcanvas-header border-bottom">
-          <span class="fw-semibold">down.mr-joep.nl</span>
+          <span class="fw-semibold">dow.mr-joep.nl</span>
           <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#sidebar" aria-label="Close"></button>
         </div>
         <div class="offcanvas-body d-lg-flex flex-column p-2 pt-lg-3">
-          <div class="d-none d-lg-block px-2 pb-3 brand">down.mr-joep.nl</div>
+          <div class="d-none d-lg-block px-2 pb-3 brand">dow.mr-joep.nl</div>
           <ul class="nav nav-pills flex-column gap-1">
             <?php foreach (panel_nav() as $slug => [$href, $label]): ?>
             <li class="nav-item">

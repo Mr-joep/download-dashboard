@@ -61,7 +61,7 @@ if ($path === '/' || $path === '/robots.txt') {
         echo "User-agent: *\nDisallow: /panel/\n";
     } else {
         header('Content-Type: text/html; charset=utf-8');
-        echo simple_page('down.mr-joep.nl', 'File download server.');
+        echo simple_page('dow.mr-joep.nl', 'File download server.');
     }
     exit;
 }

@@ -63,4 +63,27 @@ final class RequestLogger
             ['bytes' => $bytesSent, 'finished' => now(), 'bytes2' => $bytesSent, 'id' => $id]
         );
     }
+
+    /**
+     * Same as finalize(), but for nginx's post_action callback: nginx's
+     * post_action subrequest only exposes the *original* client request
+     * (method/path/headers), not the X-Accel-Redirect target's query string
+     * or the response headers PHP set on it - so there is no signed dlid to
+     * key off. Instead this matches the most recent still-open row for the
+     * same path + ip, which is unambiguous at this app's scale (~20 files,
+     * a handful of downloads/day).
+     */
+    public static function finalizeByPathIp(string $path, string $ip, int $bytesSent): void
+    {
+        Database::run(
+            'UPDATE downloads
+                SET bytes_sent  = :bytes,
+                    finished_at = :finished,
+                    completed   = IF(file_size IS NOT NULL AND file_size > 0 AND :bytes2 >= file_size, 1, 0)
+              WHERE path = :path AND ip = :ip AND finished_at IS NULL
+              ORDER BY id DESC
+              LIMIT 1',
+            ['bytes' => $bytesSent, 'finished' => now(), 'bytes2' => $bytesSent, 'path' => $path, 'ip' => $ip]
+        );
+    }
 }
