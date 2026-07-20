@@ -7,17 +7,67 @@ require __DIR__ . '/inc/panel.php';
 $repo = new FileRepository($config);
 $repo->syncFromDisk();
 
-$baseUrl = rtrim((string) $config['public_base_url'], '/');
-$message = null;
-$error   = null;
-$newLink = null;
-$isAjax  = ($_POST['ajax'] ?? '') === '1';
+$baseUrl   = rtrim((string) $config['public_base_url'], '/');
+$message   = null;
+$error     = null;
+$newLink   = null;
+$isAjax    = ($_POST['ajax'] ?? '') === '1';
+$isChunked = ($_POST['chunked'] ?? '') === '1';
+$chunker   = ChunkUploader::forConfig($config);
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     Auth::validateCsrf($_POST['csrf'] ?? null);
+    $chunker->cleanupStale();
 
     if (empty($config['upload_enabled'])) {
         $error = 'Uploads are disabled in config.php.';
+    } elseif ($isChunked) {
+        $uploadId    = (string) ($_POST['upload_id'] ?? '');
+        $chunkIndex  = filter_var($_POST['chunk_index'] ?? '', FILTER_VALIDATE_INT);
+        $totalChunks = filter_var($_POST['total_chunks'] ?? '', FILTER_VALIDATE_INT);
+        $name        = sanitize_filename((string) ($_POST['filename'] ?? ''));
+        $overwrite   = ($_POST['overwrite'] ?? '') === '1';
+
+        if (
+            !ChunkUploader::isValidId($uploadId) || $chunkIndex === false || $totalChunks === false
+            || $chunkIndex < 0 || $totalChunks < 1 || $chunkIndex >= $totalChunks || $totalChunks > 20000
+        ) {
+            $error = 'Invalid chunk upload request.';
+        } elseif ($name === '') {
+            $error = 'Invalid file name.';
+        } elseif (preg_match('/\.(php\d?|phtml|phar)(\.|$)/i', $name) === 1) {
+            $error = 'PHP files cannot be uploaded.';
+        } elseif (!isset($_FILES['chunk']['error']) || is_array($_FILES['chunk']['error'])) {
+            $error = 'No chunk received.';
+        } elseif ((int) $_FILES['chunk']['error'] !== UPLOAD_ERR_OK) {
+            $error = upload_error_message((int) $_FILES['chunk']['error']);
+        } else {
+            $target = $repo->filesDir() . DIRECTORY_SEPARATOR . $name;
+            if ($chunkIndex === 0 && is_file($target) && !$overwrite) {
+                $error = 'A file named "' . $name . '" already exists. Tick "Overwrite" to replace it.';
+            } else {
+                $storeError = $chunker->storeChunk($uploadId, $chunkIndex, (string) $_FILES['chunk']['tmp_name']);
+                if ($storeError !== null) {
+                    $error = $storeError;
+                } elseif ($chunkIndex === $totalChunks - 1) {
+                    if (is_file($target) && !$overwrite) {
+                        $error = 'A file named "' . $name . '" already exists. Tick "Overwrite" to replace it.';
+                        $chunker->discard($uploadId);
+                    } else {
+                        $assembleError = $chunker->assemble($uploadId, $totalChunks, $target);
+                        if ($assembleError !== null) {
+                            $error = $assembleError;
+                        } else {
+                            $size   = (int) filesize($target);
+                            $fileId = $repo->ensureRecord($name, $size);
+                            Database::run('UPDATE files SET uploaded_at = ? WHERE id = ?', [now(), $fileId]);
+                            $newLink = $baseUrl . '/' . rawurlencode($name);
+                            $message = 'Uploaded "' . $name . '" (' . format_bytes($size) . ').';
+                        }
+                    }
+                }
+            }
+        }
     } elseif (!isset($_FILES['file']['error']) || is_array($_FILES['file']['error'])) {
         $error = 'No file received.';
     } elseif ((int) $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
@@ -58,8 +108,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 
-$files     = Database::fetchAll('SELECT * FROM files WHERE missing = 0 ORDER BY filename ASC');
-$uploadMax = ini_get('upload_max_filesize') . ' (upload_max_filesize)';
+$files = Database::fetchAll('SELECT * FROM files WHERE missing = 0 ORDER BY filename ASC');
+
+// Chunks must fit under both the Cloudflare 100 MB request cap and this
+// server's own PHP limits, whichever is smaller. 10% headroom covers the
+// multipart boundary and the other POST fields.
+$phpLimitBytes = min(
+    ini_size_to_bytes((string) ini_get('upload_max_filesize')),
+    ini_size_to_bytes((string) ini_get('post_max_size'))
+);
+$chunkSize = (int) max(1024 * 1024, min(45 * 1024 * 1024, floor($phpLimitBytes * 0.9)));
 
 panel_header('Upload', 'upload');
 ?>
@@ -90,8 +148,8 @@ panel_header('Upload', 'upload');
           <input type="hidden" name="csrf" value="<?= h(Auth::csrfToken()) ?>">
           <div class="mb-3">
             <label class="form-label" for="file">File(s)</label>
-            <input class="form-control" type="file" id="file" name="file" multiple required>
-            <div class="form-text">Server upload limit: <?= h($uploadMax) ?> per file. Copy very large files to the server directly (scp/rsync); they are picked up automatically.</div>
+            <input class="form-control" type="file" id="file" name="file" multiple required data-chunk-size="<?= $chunkSize ?>">
+            <div class="form-text">Files over <?= h(format_bytes($chunkSize)) ?> are split into pieces in the browser and reassembled on the server, so the Cloudflare 100 MB request limit doesn't apply. Extremely large files can still be copied to the server directly (scp/rsync); they are picked up automatically.</div>
           </div>
           <div class="form-check mb-3">
             <input class="form-check-input" type="checkbox" id="overwrite" name="overwrite" value="1">

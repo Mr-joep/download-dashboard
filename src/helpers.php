@@ -66,6 +66,23 @@ function time_ago(?string $datetime): string
     return intdiv($diff, 86400) . 'd ago';
 }
 
+/** PHP ini shorthand size ("2M", "8G", "512K") -> bytes. */
+function ini_size_to_bytes(string $value): int
+{
+    $value = trim($value);
+    if ($value === '') {
+        return 0;
+    }
+    $unit   = strtolower($value[strlen($value) - 1]);
+    $number = (float) $value;
+    return (int) match ($unit) {
+        'g'     => $number * 1024 ** 3,
+        'm'     => $number * 1024 ** 2,
+        'k'     => $number * 1024,
+        default => $number,
+    };
+}
+
 /** Human readable message for an UPLOAD_ERR_* code. */
 function upload_error_message(int $code): string
 {

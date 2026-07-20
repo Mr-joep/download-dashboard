@@ -125,6 +125,14 @@
             var submitBtn = document.getElementById('upload-submit');
             var list = document.getElementById('upload-progress-list');
             var csrf = form.querySelector('[name="csrf"]').value;
+            // Files above this size are split into pieces client-side (see upload.php,
+            // which sizes this to fit under both the Cloudflare 100 MB request cap and
+            // this server's PHP limits) and reassembled server-side once all arrive.
+            var chunkSize = parseInt(fileInput.dataset.chunkSize, 10) || (45 * 1024 * 1024);
+
+            var makeUploadId = function () {
+                return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+            };
 
             var setRowState = function (row, cls, text) {
                 row.querySelector('.upload-status').textContent = text;
@@ -167,8 +175,7 @@
                 return row;
             };
 
-            var uploadFile = function (file, allowOverwrite) {
-                var row = buildRow(file);
+            var uploadWhole = function (file, allowOverwrite, row) {
                 return new Promise(function (resolve) {
                     var xhr = new XMLHttpRequest();
                     xhr.open('POST', 'upload.php', true);
@@ -201,6 +208,76 @@
                     fd.append('file', file);
                     xhr.send(fd);
                 });
+            };
+
+            // Sends one chunk per request so no single request body ever
+            // approaches the Cloudflare 100 MB limit, however large the file is.
+            var uploadChunked = function (file, allowOverwrite, row) {
+                var id = makeUploadId();
+                var totalChunks = Math.ceil(file.size / chunkSize);
+                var uploadedBytes = 0;
+
+                var sendChunk = function (index) {
+                    return new Promise(function (resolve, reject) {
+                        var start = index * chunkSize;
+                        var end = Math.min(start + chunkSize, file.size);
+                        var blob = file.slice(start, end);
+
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('POST', 'upload.php', true);
+                        xhr.upload.addEventListener('progress', function (e) {
+                            if (!e.lengthComputable) return;
+                            var pct = Math.round(((uploadedBytes + e.loaded) / file.size) * 100);
+                            row.querySelector('.progress-bar').style.width = pct + '%';
+                            setRowState(row, 'bg-primary', pct + '%');
+                        });
+                        xhr.onload = function () {
+                            var data = null;
+                            try { data = JSON.parse(xhr.responseText); } catch (err) { /* ignore */ }
+                            if (!data || !data.success) {
+                                reject((data && data.error) || 'Upload failed');
+                                return;
+                            }
+                            uploadedBytes += (end - start);
+                            resolve(data);
+                        };
+                        xhr.onerror = function () { reject('Network error'); };
+
+                        var fd = new FormData();
+                        fd.append('csrf', csrf);
+                        fd.append('ajax', '1');
+                        fd.append('chunked', '1');
+                        fd.append('upload_id', id);
+                        fd.append('chunk_index', String(index));
+                        fd.append('total_chunks', String(totalChunks));
+                        fd.append('filename', file.name);
+                        fd.append('overwrite', allowOverwrite ? '1' : '0');
+                        fd.append('chunk', blob, file.name);
+                        xhr.send(fd);
+                    });
+                };
+
+                var sendNext = function (index) {
+                    return sendChunk(index).then(function (data) {
+                        if (index === totalChunks - 1) {
+                            row.querySelector('.progress-bar').style.width = '100%';
+                            setRowState(row, 'bg-success', 'Done (' + data.size + ')');
+                            return;
+                        }
+                        return sendNext(index + 1);
+                    });
+                };
+
+                return sendNext(0).catch(function (err) {
+                    setRowState(row, 'bg-danger', err || 'Upload failed');
+                });
+            };
+
+            var uploadFile = function (file, allowOverwrite) {
+                var row = buildRow(file);
+                return file.size > chunkSize
+                    ? uploadChunked(file, allowOverwrite, row)
+                    : uploadWhole(file, allowOverwrite, row);
             };
 
             var skipRow = function (file) {
