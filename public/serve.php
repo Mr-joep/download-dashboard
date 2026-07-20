@@ -2,17 +2,6 @@
 
 declare(strict_types=1);
 
-/**
- * Single entry point for all download traffic.
- *
- * nginx sends every request that is not /panel/* here (see
- * nginx-example.conf), so existing links like /file.zip keep working.
- * The request is always logged first; then the file is handed back to
- * nginx with X-Accel-Redirect (production) or streamed in chunks by PHP
- * (serve_method 'php', for development). Large files never touch PHP
- * memory in either mode.
- */
-
 $config = require dirname(__DIR__) . '/src/bootstrap.php';
 
 $method  = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
