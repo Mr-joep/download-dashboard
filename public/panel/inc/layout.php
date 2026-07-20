@@ -2,6 +2,18 @@
 
 declare(strict_types=1);
 
+/**
+ * "assets/panel.js" -> "assets/panel.js?v=<mtime>" so a deploy invalidates
+ * whatever the browser cached, instead of the panel silently running stale JS
+ * against fresh HTML (e.g. mismatched table columns after an edit here).
+ */
+function panel_asset(string $path): string
+{
+    $file = __DIR__ . '/../' . $path;
+    $v    = is_file($file) ? (string) filemtime($file) : (string) time();
+    return $path . '?v=' . $v;
+}
+
 /** Navigation: slug => [file, label]. */
 function panel_nav(): array
 {
@@ -30,7 +42,7 @@ function panel_header(string $title, string $active): void
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= h($title) ?> · dow.mr-joep.nl</title>
 <link rel="stylesheet" href="assets/bootstrap.min.css">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="<?= h(panel_asset('assets/style.css')) ?>">
 </head>
 <body data-page="<?= h($active) ?>">
 <div class="container-fluid">
@@ -72,7 +84,7 @@ function panel_footer(bool $withCharts = false): void
 <?php if ($withCharts): ?>
 <script src="assets/chart.umd.min.js"></script>
 <?php endif; ?>
-<script src="assets/panel.js"></script>
+<script src="<?= h(panel_asset('assets/panel.js')) ?>"></script>
 </body>
 </html>
     <?php

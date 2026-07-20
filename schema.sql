@@ -51,6 +51,23 @@ CREATE TABLE IF NOT EXISTS downloads (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
+-- heartbeats: one row per browser tab that currently has the home page open.
+-- Client-side JS pings this every few seconds; rows are not deleted on tab
+-- close, they simply age out of the "live" window (see Heartbeat.php) and
+-- are reaped by the next ping.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS heartbeats (
+    token      VARCHAR(64)  NOT NULL,  -- random id generated client-side per page load
+    ip         VARCHAR(45)  NOT NULL,
+    user_agent VARCHAR(500) NOT NULL DEFAULT '',
+    path       VARCHAR(500) NOT NULL DEFAULT '/',
+    first_seen DATETIME     NOT NULL,
+    last_seen  DATETIME     NOT NULL,
+    PRIMARY KEY (token),
+    KEY idx_last_seen (last_seen)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
 -- files: one row per file that exists (or existed) in the download directory.
 -- Rows are created automatically by serve.php and the panel's disk sync.
 -- ----------------------------------------------------------------------------

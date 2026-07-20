@@ -71,6 +71,7 @@
     // ---- live visitors: refresh every 5 seconds ---------------------------
     if (page === 'live') {
         var tbody = document.getElementById('live-rows');
+        var visitorTbody = document.getElementById('live-visitor-rows');
         var updated = document.getElementById('live-updated');
 
         var cell = function (tr, text, cls) {
@@ -103,6 +104,40 @@
                 tr.appendChild(td);
                 tbody.appendChild(tr);
             });
+
+            if (visitorTbody) {
+                visitorTbody.textContent = '';
+                if (!data.visitors.length) {
+                    var vtr = document.createElement('tr');
+                    var vtd = cell(vtr, 'Nobody has the home page or a 404 page open.', 'text-center text-secondary py-4');
+                    vtd.colSpan = 4;
+                    visitorTbody.appendChild(vtr);
+                }
+                data.visitors.forEach(function (v) {
+                    var vtr = document.createElement('tr');
+                    cell(vtr, v.since + ' (' + v.ago + ')', 'text-nowrap');
+
+                    var pathTd = document.createElement('td');
+                    var pathSpan = document.createElement('span');
+                    pathSpan.className = 'd-inline-block text-truncate mw-path';
+                    pathSpan.textContent = v.path;
+                    pathTd.appendChild(pathSpan);
+                    vtr.appendChild(pathTd);
+
+                    cell(vtr, v.ip, 'text-nowrap');
+
+                    var uaTd = document.createElement('td');
+                    var uaSpan = document.createElement('span');
+                    uaSpan.className = 'd-inline-block text-truncate ua';
+                    uaSpan.title = v.ua;
+                    uaSpan.textContent = v.ua;
+                    uaTd.appendChild(uaSpan);
+                    vtr.appendChild(uaTd);
+
+                    visitorTbody.appendChild(vtr);
+                });
+            }
+
             if (updated) updated.textContent = '- updated ' + data.updated;
         };
 

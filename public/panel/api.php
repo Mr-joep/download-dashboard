@@ -18,7 +18,14 @@ switch ($_GET['action'] ?? '') {
             'ip'      => $r['ip'],
             'size'    => $r['file_size'] !== null ? format_bytes((int) $r['file_size']) : '',
         ], Stats::liveDownloads());
-        echo json_encode(['rows' => $rows, 'updated' => date('H:i:s')]);
+        $visitors = array_map(static fn (array $r): array => [
+            'since' => $r['first_seen'],
+            'ago'   => time_ago($r['first_seen']),
+            'ip'    => $r['ip'],
+            'ua'    => $r['user_agent'],
+            'path'  => $r['path'],
+        ], Stats::liveVisitors());
+        echo json_encode(['rows' => $rows, 'visitors' => $visitors, 'updated' => date('H:i:s')]);
         break;
 
     case 'charts':

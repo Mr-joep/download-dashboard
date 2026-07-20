@@ -58,6 +58,16 @@ final class Stats
         );
     }
 
+    /** Visitors who currently have the home page open (see Heartbeat::ping()). */
+    public static function liveVisitors(): array
+    {
+        $since = date('Y-m-d H:i:s', time() - Heartbeat::LIVE_WINDOW_SECONDS);
+        return Database::fetchAll(
+            'SELECT * FROM heartbeats WHERE last_seen >= ? ORDER BY first_seen DESC LIMIT 100',
+            [$since]
+        );
+    }
+
     /** @return array{0: array, 1: int} rows + total */
     public static function recentDownloads(int $limit, int $offset): array
     {

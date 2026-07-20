@@ -20,6 +20,24 @@ $ip        = client_ip($config);
 $userAgent = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
 $referer   = (string) ($_SERVER['HTTP_REFERER'] ?? '');
 
+// A ping from the landing page's own JS, keeping the "home page open" list
+// on the panel's live-visitors page up to date. Handled before bot/rate
+// checks (which cost a DB query) since a ping every few seconds per open
+// tab would otherwise pay for that on every single ping. Not a real page
+// view either, so it is not logged to `downloads`.
+if ($path === '/heartbeat' && $method === 'POST') {
+    $token       = (string) ($_POST['token'] ?? '');
+    $visitedPath = (string) ($_POST['path'] ?? '/');
+    if ($visitedPath === '') {
+        $visitedPath = '/';
+    }
+    if (Heartbeat::isValidToken($token)) {
+        Heartbeat::ping($token, $ip, $userAgent, $visitedPath);
+    }
+    http_response_code(204);
+    exit;
+}
+
 $bot              = BotDetector::detectBot($userAgent);
 $suspiciousReason = BotDetector::suspiciousPath($path);
 if ($suspiciousReason === null && $bot !== null && $bot['type'] === 'scanner') {
@@ -50,7 +68,12 @@ if ($path === '/' || $path === '/robots.txt') {
         echo "User-agent: *\nDisallow: /panel/\n";
     } else {
         header('Content-Type: text/html; charset=utf-8');
-        echo simple_page('dow.mr-joep.nl', 'File download server.');
+        echo simple_page(
+            'dow.mr-joep.nl',
+            'File download server.',
+            heartbeatUrl: $basePath . '/heartbeat',
+            heartbeatPage: '/'
+        );
     }
     exit;
 }
@@ -62,7 +85,12 @@ if ($file === null) {
     RequestLogger::log($base + ['status' => 404]);
     http_response_code(404);
     header('Content-Type: text/html; charset=utf-8');
-    echo simple_page('404', 'File not found.');
+    echo simple_page(
+        '404',
+        'File not found.',
+        heartbeatUrl: $basePath . '/heartbeat',
+        heartbeatPage: $path
+    );
     exit;
 }
 
@@ -208,10 +236,11 @@ function guess_mime(string $filename): string
 }
 
 /** Tiny dark page used for the landing page and 404s. */
-function simple_page(string $title, string $text): string
+function simple_page(string $title, string $text, ?string $heartbeatUrl = null, string $heartbeatPage = '/'): string
 {
-    $title = h($title);
-    $text  = h($text);
+    $title     = h($title);
+    $text      = h($text);
+    $heartbeat = $heartbeatUrl !== null ? heartbeat_script($heartbeatUrl, $heartbeatPage) : '';
     return <<<HTML
 <!doctype html>
 <html lang="en">
@@ -226,7 +255,38 @@ main{text-align:center;padding:2rem}
 h1{color:#fff;font-size:1.6rem;margin:0 0 .5rem}
 </style>
 </head>
-<body><main><h1>$title</h1><p>$text</p></main></body>
+<body><main><h1>$title</h1><p>$text</p></main>$heartbeat</body>
 </html>
+HTML;
+}
+
+/**
+ * Pings /heartbeat every 5s while this tab is open, so the panel's
+ * live-visitors page can show "home page open right now" in near real time.
+ * Presence has no explicit end signal - a closed tab just stops pinging and
+ * ages out of the live window server-side (see Heartbeat::LIVE_WINDOW_SECONDS).
+ */
+function heartbeat_script(string $url, string $page): string
+{
+    $url  = json_encode($url, JSON_UNESCAPED_SLASHES);
+    $page = json_encode($page, JSON_UNESCAPED_SLASHES);
+    return <<<HTML
+<script>
+(function () {
+    var token = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.replace(/x/g, function () {
+            return Math.floor(Math.random() * 16).toString(16);
+        });
+
+    var ping = function () {
+        var body = new URLSearchParams({ token: token, path: $page });
+        fetch($url, { method: 'POST', body: body, keepalive: true }).catch(function () {});
+    };
+
+    ping();
+    setInterval(ping, 5000);
+})();
+</script>
 HTML;
 }
