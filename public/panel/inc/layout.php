@@ -49,10 +49,6 @@ function panel_header(string $title, string $active): void
             </li>
             <?php endforeach; ?>
           </ul>
-          <hr class="my-2">
-          <ul class="nav nav-pills flex-column">
-            <li class="nav-item"><a class="nav-link" href="logout.php">Log out</a></li>
-          </ul>
         </div>
       </div>
     </aside>

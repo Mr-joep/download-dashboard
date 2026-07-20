@@ -1,10 +1,10 @@
-# down.mr-joep.nl — download tracking system
+# dow.mr-joep.nl — download tracking system
 
 Lightweight, self-hosted download tracker for an nginx download server.
 Plain PHP 8 + MariaDB, Bootstrap 5 and Chart.js (both bundled locally),
 no Composer, no frameworks, no external APIs.
 
-**Existing download URLs keep working unchanged** (`https://down.mr-joep.nl/file.zip`).
+**Existing download URLs keep working unchanged** (`https://dow.mr-joep.nl/file.zip`).
 Every request is logged *before* the file is served; the actual transfer is done
 by nginx via `X-Accel-Redirect`, so even a 260 GB file never touches PHP memory.
 
@@ -23,76 +23,51 @@ by nginx via `X-Accel-Redirect`, so even a 260 GB file never touches PHP memory.
 - Bootstrap dark dashboard: overview, live visitors (auto-refresh), recent
   downloads, top downloads, top IPs, bots, 404s, search, Chart.js statistics and
   an upload manager with overwrite confirmation and download-link generator.
+  **No login** — anyone who can reach `/panel/` can use it.
 
-## Layout
-
-```
-config.php             your configuration (copy of config.example.php)
-schema.sql             database schema + seeded bot signatures
-nginx-example.conf     nginx server block for production
-dev-router.php         router for `php -S` local development
-src/                   PHP classes (Database, BotDetector, FileRepository, ...)
-public/                web root
-├── serve.php          entry point for ALL download traffic
-├── complete.php       nginx post_action callback (internal only)
-└── panel/             dashboard (password protected)
-```
-
-## Deployment (Debian, nginx 1.26, PHP 8.4-FPM, MariaDB)
-
-1. **Copy the app** to the server, e.g. `/home/dow/app` (the download files stay
-   where they are, in `/home/dow/public_html`):
-
-   ```
-   rsync -a --exclude config.php --exclude storage ./ dow@server:/home/dow/app/
-   ```
-
-2. **Create the database** and import the schema:
-
-   ```sql
-   CREATE DATABASE downtrack CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-   CREATE USER 'downtrack'@'localhost' IDENTIFIED BY 'your-password';
-   GRANT SELECT, INSERT, UPDATE, DELETE ON downtrack.* TO 'downtrack'@'localhost';
-   ```
-   ```
-   mysql -u downtrack -p downtrack < schema.sql
-   ```
-
-3. **Configure**: `cp config.example.php config.php` and set the database
-   credentials, `files_dir` (`/home/dow/public_html`), a panel password and a
-   random `complete_secret`. Keep `serve_method` on `xaccel`.
-
-4. **nginx**: copy `nginx-example.conf` into your site config (merge with your
-   existing TLS setup) and reload. The `/_protected/` alias must point at
-   `files_dir` and its `post_action /complete.php;` line is what powers the
-   completed-yes/no tracking and the live-visitors page.
-
-5. **Permissions**: PHP-FPM needs read access to the files, and write access to
-   `files_dir` only if you use the upload page.
-
-6. **Uploads** (optional): browser uploads are limited by
-   `client_max_body_size` (nginx) and `upload_max_filesize` / `post_max_size`
-   (php.ini). Huge files are better copied with scp/rsync — they appear in the
-   panel automatically.
-
-Dashboard: `https://down.mr-joep.nl/panel/`
-
-## Local development (no nginx)
-
-`config.php` in this repo is already set up for local testing: it uses the
-`storage/` directory for files and `serve_method => 'php'` (PHP streams the file
-itself in 256 KB chunks — dev only).
+## Layout as deployed on this server
 
 ```
-mysql -u root downtrack < schema.sql     # after creating the database
-php -S 127.0.0.1:8080 -t public dev-router.php
+/home/dow/public_html/
+├── config.php            live configuration (db creds, files_dir, secrets)
+├── config.example.php    documents every config.php option
+├── schema.sql             database schema + seeded bot signatures
+├── nginx-example.conf     original upstream example (kept for reference only —
+│                          the live nginx config differs, see below)
+├── dev-router.php         router for `php -S` local development
+├── src/                   PHP classes (Database, BotDetector, FileRepository, ...)
+├── public/                nginx docroot
+│   ├── serve.php          entry point for ALL download traffic
+│   ├── complete.php       nginx post_action callback (internal only)
+│   └── panel/             dashboard (no login)
+└── files/                 files_dir — the actual downloadable files live here
 ```
 
-- Download: `http://127.0.0.1:8080/yourfile.zip`
-- Panel: `http://127.0.0.1:8080/panel/` (password `dev`)
+`config.php`, `schema.sql`, `src/`, and `.git` sit inside `public_html` but are
+**never web-reachable**: nginx's `root` points at `public_html/public`, not
+`public_html` itself, and `public/`'s catch-all (`location /` → `serve.php`)
+never falls through to serving arbitrary static files, so those paths return
+serve.php's own 404 regardless of what's actually on disk there.
 
-An `.htaccess` is included for testing under Apache/XAMPP instead; set
-`base_path` in config.php to the subdirectory prefix (e.g. `/down/public`).
+To add a new download: drop the file into `/home/dow/public_html/files/` (or
+upload it through the panel). It appears in the dashboard automatically, and
+`https://dow.mr-joep.nl/<filename>` starts working immediately — no config
+changes, no restart.
+
+## nginx
+
+The live vhost is `/etc/nginx/sites-available/dow.mr-joep.nl.conf`, generated
+from `nginx-example.conf` but adapted for this Virtualmin-managed server:
+root points at `public_html/public`, `/_protected/` (the X-Accel-Redirect
+target) is aliased to `public_html/files/`, and the existing SSL cert paths /
+webmail / admin subdomain redirects Virtualmin manages were preserved. A
+backup of the pre-deploy config is at `/root/dow.mr-joep.nl.conf.bak`.
+
+Reload after editing:
+
+```
+nginx -t && systemctl reload nginx
+```
 
 ## How a download flows (production)
 
@@ -101,10 +76,38 @@ An `.htaccess` is included for testing under Apache/XAMPP instead; set
    inserts a `downloads` row (`completed = 0`).
 3. serve.php replies with `X-Accel-Redirect: /_protected/file.zip?dlid=<id>&tok=<hmac>`.
 4. nginx streams the file (sendfile, ranges, resume — PHP is already done).
-5. When the transfer ends, nginx's `post_action` calls `complete.php` with the
-   byte count; the row gets `finished_at`, `bytes_sent` and `completed = 1` if
-   the whole file went out. Without `post_action`, everything still works —
-   transfers just show as "Unknown" instead of "Completed".
+5. When the transfer ends, nginx's `post_action` calls `complete.php`, which
+   marks the row `finished_at` / `bytes_sent` / `completed = 1` if the whole
+   file went out.
+
+**Note on step 5**, since it differs from a naive reading of `nginx-example.conf`:
+nginx's `post_action` subrequest only ever sees the *original* client request
+(`GET /file.zip`, no query string) — not the `dlid`/`tok` appended to the
+X-Accel-Redirect target in step 3, and not any response header serve.php sets
+either (X-Accel-Redirect discards the whole original response once the
+internal redirect happens). So `complete.php` can't use the signed id at all;
+instead it matches the open `downloads` row by **path + IP** (both of which
+nginx *does* preserve for `post_action`), picking the most recent unfinished
+one. Unambiguous at this app's scale (~20 files, a handful of downloads/day).
+See `RequestLogger::finalizeByPathIp()`.
+
+## Local development (no nginx)
+
+For local testing, copy `config.example.php` to `config.php` and set
+`files_dir` to a local `storage/` directory and `serve_method` to `'php'`
+(PHP streams the file itself in 256 KB chunks — dev only, not what's running
+in production here).
+
+```
+mysql -u root downtrack < schema.sql     # after creating the database
+php -S 127.0.0.1:8080 -t public dev-router.php
+```
+
+- Download: `http://127.0.0.1:8080/yourfile.zip`
+- Panel: `http://127.0.0.1:8080/panel/`
+
+An `.htaccess` is included for testing under Apache/XAMPP instead; set
+`base_path` in config.php to the subdirectory prefix (e.g. `/down/public`).
 
 ## Extending (future features)
 
@@ -121,5 +124,5 @@ managed in the `bots` table without code changes.
   database's own timezone is never used.
 - A download is *counted* once: Range requests that don't start at byte 0
   (resumes, download-manager segments) are logged but don't bump counters.
-- The panel is session-protected; uploads are CSRF-protected and PHP file
-  extensions are refused.
+- Uploads are CSRF-protected and PHP file extensions are refused, but the
+  panel itself has no authentication — see "What it does" above.

@@ -15,7 +15,8 @@ return [
     'public_base_url' => 'https://dow.mr-joep.nl',
     'base_path' => '',
 
-    'panel_password' => '$2y$12$aLUZOSaZkbmquj5A..JHkuyz/uQA6Xjpq/rznYGdy2ZoVW2cdn2eS',
+    // Unused: /panel/ has no login (see public/panel/inc/panel.php).
+    'panel_password' => '',
     'upload_enabled' => true,
 
     'complete_secret' => 'cfee53beff9f23fd3f0a712a0b9dd5a99b69b3d872ba2b6fc7b98986eed44223',
