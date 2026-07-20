@@ -131,8 +131,9 @@ if ($counted) {
 }
 
 if (($config['serve_method'] ?? 'xaccel') === 'xaccel') {
-    // Hand the transfer to nginx. complete.php is pinged when it ends.
-    $token   = hash_hmac('sha256', (string) $logId, (string) $config['complete_secret']);
+    // Hand the transfer to nginx. complete.php is pinged when it ends and
+    // matches this download by path + ip (see RequestLogger::finalizeByPathIp);
+    // dlid is carried along for log readability, not looked up by anything.
     $encoded = implode('/', array_map('rawurlencode', explode('/', $file['filename'])));
 
     // No Content-Type from PHP: nginx picks the right one from mime.types.
@@ -140,7 +141,7 @@ if (($config['serve_method'] ?? 'xaccel') === 'xaccel') {
     header_remove('Content-Type');
     header(
         'X-Accel-Redirect: ' . rtrim((string) $config['xaccel_prefix'], '/') . '/'
-        . $encoded . '?dlid=' . $logId . '&tok=' . $token
+        . $encoded . '?dlid=' . $logId
     );
     exit;
 }

@@ -12,7 +12,6 @@ return [
 
     'upload_enabled' => true,
 
-    'complete_secret' => 'cfee53beff9f23fd3f0a712a0b9dd5a99b69b3d872ba2b6fc7b98986eed44223',
     'timezone' => 'Europe/Amsterdam',
     'trust_forwarded_for' => false,
     'rate_window' => 60,
